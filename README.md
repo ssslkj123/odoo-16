@@ -2,8 +2,10 @@
 
 
 # Docker 构建命令:
+```shell
 docker build  -f  ./00-Dockerfile-initial  .    -t mengxy32/odoo-16.0:20240126-initial
 docker build  -f ./01-Dockerfile-odoo-start  .    -t mengxy32/odoo-16.0:20240126-all-v1.0
+```
 
 ```
 mengxy32/odoo-16.0:20240126-initial 用于安装odoo 初始化的基础镜像。
