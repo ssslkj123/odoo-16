@@ -1,0 +1,145 @@
+FROM debian:bullseye-slim
+MAINTAINER Odoo S.A. <info@odoo.com>
+
+SHELL ["/bin/bash", "-xo", "pipefail", "-c"]
+
+# Generate locale C.UTF-8 for postgres and general locale data
+ENV LANG C.UTF-8
+
+# 创建odoo用户
+RUN useradd -r -u 1111 -g odoo odoo
+
+# Retrieve the target architecture to install the correct wkhtmltopdf package
+ARG TARGETARCH
+
+# Install some deps, lessc and less-plugin-clean-css, and wkhtmltopdf
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        dirmngr \
+        fonts-noto-cjk \
+        gnupg \
+        libssl-dev \
+        node-less \
+        npm \
+        python3-magic \
+        python3-num2words \
+        python3-odf \
+        python3-pdfminer \
+        python3-pip \
+        python3-phonenumbers \
+        python3-pyldap \
+        python3-qrcode \
+        python3-renderpm \
+        python3-setuptools \
+        python3-slugify \
+        python3-vobject \
+        python3-watchdog \
+        python3-xlrd \
+        python3-xlwt \
+        xz-utils && \
+    if [ -z "${TARGETARCH}" ]; then \
+        TARGETARCH="$(dpkg --print-architecture)"; \
+    fi; \
+    WKHTMLTOPDF_ARCH=${TARGETARCH} && \
+    case ${TARGETARCH} in \
+    "amd64") WKHTMLTOPDF_ARCH=amd64 && WKHTMLTOPDF_SHA=9df8dd7b1e99782f1cfa19aca665969bbd9cc159  ;; \
+    "arm64")  WKHTMLTOPDF_SHA=58c84db46b11ba0e14abb77a32324b1c257f1f22  ;; \
+    "ppc64le" | "ppc64el") WKHTMLTOPDF_ARCH=ppc64el && WKHTMLTOPDF_SHA=7ed8f6dcedf5345a3dd4eeb58dc89704d862f9cd  ;; \
+    esac
+# 配置代理
+ENV http_proxy http://192.168.31.10:7890
+ENV https_proxy http://192.168.31.10:7890
+
+# 安装wkhtmltox.deb包
+RUN if [ -z "${TARGETARCH}" ]; then \
+        TARGETARCH="$(dpkg --print-architecture)"; \
+    fi; \
+    WKHTMLTOPDF_ARCH=${TARGETARCH} && \
+    case ${TARGETARCH} in \
+    "amd64") WKHTMLTOPDF_ARCH=amd64 && WKHTMLTOPDF_SHA=9df8dd7b1e99782f1cfa19aca665969bbd9cc159  ;; \
+    "arm64")  WKHTMLTOPDF_SHA=58c84db46b11ba0e14abb77a32324b1c257f1f22  ;; \
+    "ppc64le" | "ppc64el") WKHTMLTOPDF_ARCH=ppc64el && WKHTMLTOPDF_SHA=7ed8f6dcedf5345a3dd4eeb58dc89704d862f9cd  ;; \
+    esac \
+    && curl -o wkhtmltox.deb -sSL https://github.com/wkhtmltopdf/packaging/releases/download/0.12.6.1-3/wkhtmltox_0.12.6.1-3.bullseye_${WKHTMLTOPDF_ARCH}.deb \
+    && echo ${WKHTMLTOPDF_SHA} wkhtmltox.deb | sha1sum -c - \
+    && apt-get install -y --no-install-recommends ./wkhtmltox.deb \
+    && rm -rf /var/lib/apt/lists/* wkhtmltox.deb
+
+# 安装postgresql的连接客户端工具
+# install latest postgresql-client
+RUN echo 'deb http://apt.postgresql.org/pub/repos/apt/ bullseye-pgdg main' > /etc/apt/sources.list.d/pgdg.list \
+    && GNUPGHOME="$(mktemp -d)" \
+    && export GNUPGHOME \
+    && repokey='B97B0AFCAA1A47F044F244A07FCC7D46ACCC4CF8' \
+    && gpg --batch --keyserver keyserver.ubuntu.com --recv-keys "${repokey}" \
+    && gpg --batch --armor --export "${repokey}" > /etc/apt/trusted.gpg.d/pgdg.gpg.asc \
+    && gpgconf --kill all \
+    && rm -rf "$GNUPGHOME" \
+    && apt-get update  \
+    && apt-get install --no-install-recommends -y postgresql-client \
+    && rm -f /etc/apt/sources.list.d/pgdg.list \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install rtlcss (on Debian buster)
+RUN npm install -g rtlcss
+################################################
+# 清空http代理
+ENV http_proxy ""
+ENV https_proxy ""
+# ADD ./packages/deb-packages.tar.gz  /var/lib/apt/lists/
+# RUN apt-get -y install ./pack/*.deb
+
+################################################
+#RUN curl -o odoo.deb -sSL http://nightly.odoo.com/${ODOO_VERSION}/nightly/deb/odoo_${ODOO_VERSION}.${ODOO_RELEASE}_all.deb \
+
+
+# 安装odoo.deb包所需的软件包。
+RUN apt-get update \
+    && apt-get -y install  python-babel-localedata python3-tz python3-babel python3-decorator sgml-base xml-core docutils-common python3-roman python3-docutils libev4 python3-zope.event python3-zope.interface python3-greenlet python3-gevent python3-idna python3-markupsafe python3-jinja2 libsass1 python3-libsass libxml2 libxslt1.1 python3-lxml python3-soupsieve python3-bs4 python3-ofxparse python3-openssl  python3-passlib  python3-polib  python3-psutil  python3-psycopg2  libann0  libcdt5  libcgraph6  libxpm4  libgd3  libglib2.0-0  libgts-0.7-5  libpixman-1-0 libxcb-render0  libxcb-shm0  libcairo2  libltdl7  libfribidi0  libgraphite2-3  libharfbuzz0b  libthai-data  libdatrie1  libthai0  libpango-1.0-0  libpangoft2-1.0-0  libpangocairo-1.0-0  libpathplan4  libgvc6  libgvpr2  liblab-gamut1  libice6  libsm6  libxt6  libxmu6  libxaw7  graphviz  python3-pyparsing  python3-pydot  python3-pypdf2  python3-reportlab-accel  python3-reportlab  python3-certifi  python3-urllib3  python3-requests  python3-serial  python3-stdnum  libusb-1.0-0  python3-usb  python3-werkzeug  python3-xlsxwriter  python3-appdirs  python3-attr  python3-cached-property  python3-freezegun  python3-isodate  python3-requests-file  python3-requests-toolbelt  python3-zeep  fonts-dejavu-core  fonts-inconsolata  fonts-font-awesome  fonts-roboto-unhinted  gsfonts \
+    && rm -rf /var/lib/apt/lists/*
+
+
+# 安装odoo软件，实验环境开始部分.
+# Install Odoo
+ENV ODOO_VERSION 16.0
+ARG ODOO_RELEASE=20240126
+ARG ODOO_SHA=7774e76d4044e675b9d1ca64832e6a581d90a9b6
+# 拷贝本地软件包到构建目录。
+COPY ./packages/odoo_16.0.20240126_all.deb odoo.deb
+
+# 安装odoo软件,清理缓存层。
+RUN echo "${ODOO_SHA} odoo.deb" | sha1sum -c - \
+    && apt-get -y install --no-install-recommends ./odoo.deb \
+    && rm -rf odoo.deb
+
+# 拷贝入口脚本
+# Copy entrypoint script and Odoo configuration file
+COPY ./entrypoint.sh /
+COPY ./odoo.conf /etc/odoo/
+
+# 更改插件与odoo配置文件权限
+# Set permissions and Mount /var/lib/odoo to allow restoring filestore and /mnt/extra-addons for users addons
+RUN chown odoo /etc/odoo/odoo.conf \
+    && mkdir -p /mnt/extra-addons \
+    && chown -R odoo /mnt/extra-addons
+VOLUME ["/var/lib/odoo", "/mnt/extra-addons"]
+
+# 宣告odoo服务暴露端口
+# Expose Odoo services
+EXPOSE 8069 8071 8072
+
+# 配置odoo 配置文件加载值。
+# Set the default config file
+ENV ODOO_RC /etc/odoo/odoo.conf
+
+# 拷贝entrypoint.sh 脚本所需的pgsql健康等待脚本。
+COPY wait-for-psql.py /usr/local/bin/wait-for-psql.py
+
+
+# Set default user when running the container
+USER odoo
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["odoo"]

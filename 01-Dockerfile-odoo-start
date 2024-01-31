@@ -1,0 +1,55 @@
+FROM mengxy32/odoo-16.0:20240126-initial
+MAINTAINER Meng xy <mengxy32@163.com>
+
+# 创建odoo用户
+#RUN groupadd -g 1111 odoo \
+#    && useradd -r -u 1111 -g odoo odoo
+
+# 安装odoo软件，实验环境开始部分.
+# Install Odoo
+ENV ODOO_VERSION 16.0
+ARG ODOO_RELEASE=20240126
+ARG ODOO_SHA=7774e76d4044e675b9d1ca64832e6a581d90a9b6
+# 拷贝本地软件包到构建目录。
+COPY ./packages/odoo_16.0.20240126_all.deb odoo.deb
+# 安装odoo软件,清理缓存层。
+RUN echo "${ODOO_SHA} odoo.deb" | sha1sum -c - \
+    && apt-get -y install --no-install-recommends ./odoo.deb \
+    && rm -rf odoo.deb
+
+# 拷贝入口脚本
+# Copy entrypoint script and Odoo configuration file
+COPY ./entrypoint.sh /
+COPY ./odoo.conf /etc/odoo/
+
+# 更改插件与odoo配置文件权限
+# Set permissions and Mount /var/lib/odoo to allow restoring filestore and /mnt/extra-addons for users addons
+RUN chown odoo /etc/odoo/odoo.conf \
+    && mkdir -p /mnt/extra-addons \
+    && chown -R odoo /mnt/extra-addons
+VOLUME ["/var/lib/odoo", "/mnt/extra-addons"]
+
+#RUN chown -R odoo /var/lib/odoo \
+#    && chown -R odoo /mnt/extra-addons
+
+# 宣告odoo服务暴露端口
+# Expose Odoo services
+EXPOSE 8069 8071 8072
+
+# 配置odoo 配置文件加载值。
+# Set the default config file
+ENV ODOO_RC /etc/odoo/odoo.conf
+
+# 拷贝entrypoint.sh 脚本所需的pgsql健康等待脚本。
+COPY wait-for-psql.py /usr/local/bin/wait-for-psql.py
+
+
+# 创建odoo用户
+#RUN groupadd -g 1111 odoo \
+#    && useradd -r -u 1111 -g odoo odoo
+# Set default user when running the container
+USER odoo
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["odoo"]
+
